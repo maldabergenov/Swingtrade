@@ -1,0 +1,38 @@
+name: scan
+
+# Расписание задаётся в UTC. Казахстан — UTC+5 без перехода на летнее время:
+#   09:00 Астана = 04:00 UTC
+#   21:00 Астана = 16:00 UTC
+# GitHub Actions может запускать задачи с задержкой до нескольких минут —
+# для точного времени используйте `serve` на своём сервере (см. README).
+on:
+  schedule:
+    - cron: "0 4 * * 1-6"
+    - cron: "0 16 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Сканирование рынка и отправка в Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TIMEZONE: Asia/Almaty
+        run: python -m swingscan scan
+      - name: Сохранить отчёт как артефакт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-report-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 30

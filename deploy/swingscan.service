@@ -1,0 +1,29 @@
+# Установка:
+#   sudo cp deploy/swingscan.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now swingscan
+[Unit]
+Description=swingscan — сканер акций США для swing-торговли
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=swing
+WorkingDirectory=/opt/swingscan
+EnvironmentFile=/opt/swingscan/.env
+ExecStart=/opt/swingscan/.venv/bin/python -m swingscan serve
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Минимальные права
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/swingscan/state /opt/swingscan/reports /opt/swingscan/cache
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+services:
+  swingscan:
+    build: .
+    image: swingscan:latest
+    container_name: swingscan
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Almaty
+    volumes:
+      - ./state:/app/state
+      - ./reports:/app/reports
+      - ./cache:/app/cache

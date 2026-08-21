@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swingscan"
+version = "1.0.0"
+description = "Сканер акций США для swing-торговли с доставкой отчётов в Telegram"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "yfinance>=0.2.55",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "requests>=2.31",
+    "APScheduler>=3.10,<4",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[project.scripts]
+swingscan = "swingscan.cli:main"
+
+[tool.setuptools]
+packages = ["swingscan"]
+
+[tool.setuptools.package-data]
+swingscan = ["data/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

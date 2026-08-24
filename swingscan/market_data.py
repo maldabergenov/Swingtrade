@@ -177,7 +177,7 @@ class MarketData:
             group_by="ticker",
             threads=True,
             progress=False,
-            repair=True,
+            repair=False,
         )
 
     # ------------------------------------------------------- фундаментальные

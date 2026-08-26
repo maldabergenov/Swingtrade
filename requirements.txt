@@ -5,3 +5,6 @@ scipy>=1.11
 requests>=2.31
 APScheduler>=3.10,<4
 python-dotenv>=1.0
+# Пересказ заголовков на русском в маркет-апдейте (опционально:
+# без ANTHROPIC_API_KEY блок просто деградирует).
+anthropic>=0.40

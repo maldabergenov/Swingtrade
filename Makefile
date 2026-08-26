@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test coverage scan serve schedule telegram-test docker-build docker-up clean
+.PHONY: help install install-dev test coverage scan market-update serve schedule telegram-test docker-build docker-up clean
 
 help:
 	@echo "make install       — установить зависимости"
@@ -6,6 +6,7 @@ help:
 	@echo "make test          — прогнать тесты"
 	@echo "make coverage      — тесты с отчётом покрытия"
 	@echo "make scan          — разовое сканирование (без отправки: make scan ARGS=--dry-run)"
+	@echo "make market-update — собрать маркет апдейт (без отправки: ARGS=--dry-run)"
 	@echo "make serve         — запустить планировщик 09:00 / 21:00"
 	@echo "make schedule      — показать ближайшие запуски"
 	@echo "make telegram-test — проверить связь с Telegram-ботом"
@@ -25,6 +26,9 @@ coverage:
 
 scan:
 	python -m swingscan scan $(ARGS)
+
+market-update:
+	python market_update.py $(ARGS)
 
 serve:
 	python -m swingscan serve $(ARGS)

@@ -433,3 +433,148 @@ def test_many_dead_feeds_collapse_into_one_line(config):
     session = FakeSession({".test/rss": ConnectionError("нет сети")})
     section = collect_news(cfg, session=session, now=NOW)
     assert "не ответило источников: 8" in section.reason
+
+
+# ------------------------------------------------------- провайдеры котировок
+@pytest.fixture()
+def fake_yfinance(monkeypatch):
+    """Подменяет yfinance выдачей той же формы, что отдаёт настоящий download().
+
+    Для нескольких тикеров yfinance возвращает MultiIndex-колонки (поле, тикер).
+    Проверить это на живой сети в тестах нельзя, а форма — самое хрупкое место
+    провайдера, поэтому фиксируем её здесь.
+    """
+    import sys
+    import types
+
+    import numpy as np
+    import pandas as pd
+
+    def install(symbols: list[str], *, bars: int = 5, multiindex: bool = True):
+        index = pd.date_range("2026-08-19", periods=bars, freq="B")
+        fields = ["Open", "High", "Low", "Close", "Volume"]
+        if multiindex:
+            data = {
+                (field, symbol): np.linspace(100.0 * (i + 1), 100.0 * (i + 1) * 1.02, bars)
+                for field in fields
+                for i, symbol in enumerate(symbols)
+            }
+            frame = pd.DataFrame(
+                data, index=index, columns=pd.MultiIndex.from_product([fields, symbols])
+            )
+        else:
+            frame = pd.DataFrame(
+                {field: np.linspace(100.0, 102.0, bars) for field in fields}, index=index
+            )
+        module = types.ModuleType("yfinance")
+        module.download = lambda **_kwargs: frame
+        monkeypatch.setitem(sys.modules, "yfinance", module)
+        return frame
+
+    return install
+
+
+def test_yfinance_provider_parses_multiindex_batch(config, fake_yfinance):
+    from swingscan.marketupdate.market import _fetch_yfinance
+
+    fake_yfinance(["^GSPC", "XLK", "XLE"])
+    quotes = _fetch_yfinance(
+        [
+            InstrumentSpec("^GSPC", "S&P 500", "SPY"),
+            InstrumentSpec("XLK", "Технологии"),
+            InstrumentSpec("XLE", "Энергетика"),
+        ],
+        config,
+    )
+    assert set(quotes) == {"^GSPC", "XLK", "XLE"}
+    assert quotes["^GSPC"].change_pct == pytest.approx(0.4926, abs=1e-3)
+    assert quotes["XLK"].session_date == "25.08.2026"
+
+
+def test_yfinance_provider_handles_flat_single_ticker_frame(config, fake_yfinance):
+    from swingscan.marketupdate.market import _fetch_yfinance
+
+    fake_yfinance(["SPY"], multiindex=False)
+    quotes = _fetch_yfinance([InstrumentSpec("SPY", "S&P 500 ETF")], config)
+    assert quotes["SPY"].close == pytest.approx(102.0)
+
+
+def test_collect_market_uses_yfinance_and_ranks_sectors(config, fake_yfinance):
+    from swingscan.marketupdate.market import collect_market
+
+    fake_yfinance(["^GSPC", "XLK", "XLE", "XLF"])
+    section = collect_market(config)
+    assert section.ok and section.provider == "yfinance"
+    assert [q.title for q in section.indices] == ["S&P 500"]
+    # Секторы отсортированы: топ-3 роста и топ-3 падения берутся из одного набора.
+    assert len(section.gainers) == 3 and len(section.losers) == 3
+    assert section.gainers[0].change_pct >= section.losers[0].change_pct
+    assert section.context  # контекст собран эвристикой, без LLM
+
+
+def test_alphavantage_provider_parses_global_quote(config):
+    from swingscan.marketupdate.market import _fetch_alphavantage
+
+    cfg = MarketUpdateConfig(**{**config.__dict__, "alphavantage_key": "KEY"})
+    session = FakeSession(
+        {
+            "alphavantage.co": FakeResponse(
+                payload={
+                    "Global Quote": {
+                        "01. symbol": "SPY",
+                        "05. price": "641.20",
+                        "07. latest trading day": "2026-08-25",
+                        "08. previous close": "637.10",
+                    }
+                }
+            )
+        }
+    )
+    quotes = _fetch_alphavantage([InstrumentSpec("^GSPC", "S&P 500", "SPY")], cfg, session=session)
+    # Индекс подменяется ETF-прокси — запрашивается SPY, а не ^GSPC.
+    assert "SPY" in quotes
+    assert quotes["SPY"].change_pct == pytest.approx(0.6435, abs=1e-3)
+    assert quotes["SPY"].session_date == "25.08.2026"
+
+
+def test_alphavantage_rate_limit_is_reported_not_silently_empty(config):
+    from swingscan.marketupdate.feeds import FetchError
+    from swingscan.marketupdate.market import _fetch_alphavantage
+
+    cfg = MarketUpdateConfig(**{**config.__dict__, "alphavantage_key": "KEY"})
+    session = FakeSession(
+        {
+            "alphavantage.co": FakeResponse(
+                payload={"Information": "You have reached the 25 requests/day limit."}
+            )
+        }
+    )
+    with pytest.raises(FetchError, match="25 requests/day"):
+        _fetch_alphavantage([InstrumentSpec("SPY", "SPY")], cfg, session=session)
+
+
+def test_market_falls_back_to_next_provider(config, monkeypatch):
+    """Первый провайдер упал — берём следующий, а не роняем блок."""
+    from swingscan.marketupdate import market as market_module
+
+    cfg = MarketUpdateConfig(**{**config.__dict__, "alphavantage_key": "KEY"})
+
+    def broken_yfinance(*_a, **_k):
+        raise RuntimeError("Yahoo недоступен")
+
+    monkeypatch.setattr(market_module, "_fetch_yfinance", broken_yfinance)
+    session = FakeSession(
+        {
+            "alphavantage.co": FakeResponse(
+                payload={
+                    "Global Quote": {
+                        "05. price": "100.00",
+                        "07. latest trading day": "2026-08-25",
+                        "08. previous close": "99.00",
+                    }
+                }
+            )
+        }
+    )
+    section = market_module.collect_market(cfg, session=session)
+    assert section.ok and section.provider == "alphavantage"

@@ -578,3 +578,57 @@ def test_market_falls_back_to_next_provider(config, monkeypatch):
     )
     section = market_module.collect_market(cfg, session=session)
     assert section.ok and section.provider == "alphavantage"
+
+
+def test_google_news_publisher_suffix_is_stripped(config):
+    """Google News дописывает « - Издание» к заголовку — иначе источник дублируется."""
+    from swingscan.marketupdate.news import _strip_publisher_suffix
+
+    assert (
+        _strip_publisher_suffix("Four Fed bank boards wanted rate hike, minutes show - Reuters")
+        == "Four Fed bank boards wanted rate hike, minutes show"
+    )
+    # Дефис внутри самого заголовка трогать нельзя.
+    assert (
+        _strip_publisher_suffix("Fed cuts - and markets rally hard on the news today")
+        == "Fed cuts - and markets rally hard on the news today"
+    )
+    # Слишком короткий остаток — оставляем как есть, чтобы не съесть заголовок.
+    assert _strip_publisher_suffix("Short - X") == "Short - X"
+    assert _strip_publisher_suffix("Gold slips as markets await Fed") == (
+        "Gold slips as markets await Fed"
+    )
+
+
+def test_source_is_not_printed_twice_in_the_report(config):
+    """Сквозная проверка: заголовок из Google News не даёт «… - Reuters  Reuters»."""
+    google = FeedSpec("Reuters", "https://news.google.com/rss/search?q=site:reuters.com")
+    cfg = MarketUpdateConfig(**{**config.__dict__, "feeds": (google,)})
+    session = FakeSession(
+        {
+            "news.google.com": FakeResponse(
+                rss(
+                    item(
+                        "Four Fed bank boards wanted rate hike, minutes show - Reuters",
+                        "https://reuters.com/a",
+                        NOW,
+                    )
+                )
+            )
+        }
+    )
+    section = collect_news(cfg, session=session, now=NOW)
+    update = make_update()
+    update.news = section
+    text = report.format_console(update, cfg)
+    assert "minutes show Reuters" in text
+    assert text.count("Reuters") == 1
+
+
+def test_ordinary_feed_titles_keep_their_dashes(config):
+    """Очистка применяется только к Google News, обычные ленты не трогаем."""
+    session = FakeSession(
+        {"cnbc.xml": FakeResponse(rss(item("Fed policy - what comes next", "https://a.test/1", NOW)))}
+    )
+    section = collect_news(config, session=session, now=NOW)
+    assert section.headlines[0].title == "Fed policy - what comes next"

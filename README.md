@@ -401,7 +401,7 @@ Actions → New repository secret**.
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest                                    # 234 теста
+python -m pytest                                    # 237 тестов
 python -m pytest --cov=swingscan --cov-report=term-missing
 ```
 

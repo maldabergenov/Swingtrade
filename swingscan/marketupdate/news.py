@@ -25,6 +25,7 @@ from .models import Headline, NewsSection
 log = logging.getLogger(__name__)
 
 ALPHAVANTAGE_URL = "https://www.alphavantage.co/query"
+GOOGLE_NEWS_HOST = "news.google.com"
 SECTION_TITLE = "Главные новости"
 
 # Максимум заголовков от одного издания — иначе быстрая лента вытеснит остальные.
@@ -80,9 +81,10 @@ def collect_news(
         log.info("Лента %s: %d записей в окне %dч", feed.name, len(items), config.lookback_hours)
         if items:
             used.append(feed.name)
+        from_google = GOOGLE_NEWS_HOST in feed.url
         collected.extend(
             Headline(
-                title=item.title,
+                title=_strip_publisher_suffix(item.title) if from_google else item.title,
                 url=_clean_url(item.url),
                 source=feed.name,
                 published_at=item.published_at,
@@ -201,9 +203,27 @@ def _normalize(title: str) -> str:
     return " ".join(sorted(words)[:8])
 
 
+def _strip_publisher_suffix(title: str) -> str:
+    """Убирает хвост « - Издание», который Google News дописывает к заголовку.
+
+    Без этого название источника печатается дважды: один раз внутри заголовка,
+    второй — ссылкой в конце строки («… minutes show - Reuters  Reuters»).
+    Режем осторожно: только последний сегмент, только если он короткий и от
+    заголовка остаётся осмысленный текст.
+    """
+    for separator in (" - ", " — ", " – "):
+        head, found, tail = title.rpartition(separator)
+        if not found:
+            continue
+        tail = tail.strip()
+        if len(head.strip()) >= 20 and 0 < len(tail) <= 40 and len(tail.split()) <= 5:
+            return head.strip()
+    return title
+
+
 def _clean_url(url: str) -> str:
     """Google News прячет исходную ссылку в параметре url — достаём её."""
-    if "news.google.com" not in url:
+    if GOOGLE_NEWS_HOST not in url:
         return url
     target = parse_qs(urlparse(url).query).get("url")
     return target[0] if target else url

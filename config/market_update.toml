@@ -1,0 +1,190 @@
+# ------------------------------------------------------------------
+# Конфигурация ежедневного маркет-апдейта (09:00 Астана / 04:00 UTC).
+#
+# Файл редактируется вручную — сюда вынесено всё, что вы захотите менять
+# без правки кода: список индексов, секторов, RSS-лент и аккаунтов X.
+# Ключи и токены сюда НЕ пишутся — они берутся из GitHub Secrets / .env.
+# ------------------------------------------------------------------
+
+[general]
+timezone = "Asia/Almaty"
+# Окно, за которое собираются новости и посты (часов назад от запуска).
+lookback_hours = 16
+# Сколько заголовков и постов оставить в отчёте.
+max_headlines = 7
+max_tweets = 6
+http_timeout = 20.0
+user_agent = "swingscan-market-update/1.0 (+https://github.com/maldabergenov/swingtrade)"
+
+# ------------------------------------------------------------------
+# Блок 1 — итоги прошлой торговой сессии
+# ------------------------------------------------------------------
+[market]
+# Порядок провайдеров котировок. Первый, который ответил, побеждает.
+#   yfinance     — без ключа, умеет настоящие индексы (^GSPC) и батч-запросы
+#   alphavantage — нужен ALPHAVANTAGE_API_KEY, индексы заменяются на ETF-прокси
+providers = ["yfinance", "alphavantage"]
+
+[[market.indices]]
+symbol = "^GSPC"
+proxy = "SPY"          # чем заменить у провайдеров без индексов
+title = "S&P 500"
+
+[[market.indices]]
+symbol = "^IXIC"
+proxy = "ONEQ"
+title = "Nasdaq Composite"
+
+[[market.indices]]
+symbol = "^NDX"
+proxy = "QQQ"
+title = "Nasdaq 100"
+
+[[market.indices]]
+symbol = "^DJI"
+proxy = "DIA"
+title = "Dow Jones"
+
+# Секторные ETF SPDR — из них считаются топ-3 растущих и топ-3 падающих.
+[[market.sectors]]
+symbol = "XLK"
+title = "Технологии"
+
+[[market.sectors]]
+symbol = "XLC"
+title = "Коммуникации"
+
+[[market.sectors]]
+symbol = "XLY"
+title = "Потреб. цикличный"
+
+[[market.sectors]]
+symbol = "XLP"
+title = "Потреб. защитный"
+
+[[market.sectors]]
+symbol = "XLF"
+title = "Финансы"
+
+[[market.sectors]]
+symbol = "XLV"
+title = "Здравоохранение"
+
+[[market.sectors]]
+symbol = "XLI"
+title = "Промышленность"
+
+[[market.sectors]]
+symbol = "XLE"
+title = "Энергетика"
+
+[[market.sectors]]
+symbol = "XLB"
+title = "Сырьё"
+
+[[market.sectors]]
+symbol = "XLU"
+title = "Коммунальные"
+
+[[market.sectors]]
+symbol = "XLRE"
+title = "Недвижимость"
+
+# ------------------------------------------------------------------
+# Блок 2 — новости финансовых изданий (открытые RSS, ключи не нужны)
+# ------------------------------------------------------------------
+[news]
+# Alpha Vantage NEWS_SENTIMENT как дополнительный источник.
+# Работает только если задан ALPHAVANTAGE_API_KEY, иначе молча пропускается.
+use_alphavantage = true
+
+[[news.feeds]]
+name = "CNBC"
+url = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114"
+
+[[news.feeds]]
+name = "CNBC Markets"
+url = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"
+
+[[news.feeds]]
+name = "MarketWatch"
+url = "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+
+[[news.feeds]]
+name = "WSJ Markets"
+url = "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"
+
+[[news.feeds]]
+name = "WSJ Economy"
+url = "https://feeds.content.dowjones.io/public/rss/socialeconomyfeed"
+
+[[news.feeds]]
+name = "Financial Times"
+url = "https://www.ft.com/rss/home"
+
+# У Reuters и Bloomberg нет публичных RSS — забираем через Google News.
+[[news.feeds]]
+name = "Reuters"
+url = "https://news.google.com/rss/search?q=site:reuters.com+when:1d+(markets+OR+fed+OR+economy)&hl=en-US&gl=US&ceid=US:en"
+
+[[news.feeds]]
+name = "Bloomberg"
+url = "https://news.google.com/rss/search?q=site:bloomberg.com+when:1d+(markets+OR+fed+OR+economy)&hl=en-US&gl=US&ceid=US:en"
+
+# Ключевые слова повышают приоритет заголовка (макро / ставки / геополитика).
+[news.priority]
+high = [
+  "fed", "fomc", "powell", "rate cut", "rate hike", "interest rate", "yield",
+  "treasury", "inflation", "cpi", "ppi", "pce", "jobs report", "payrolls",
+  "unemployment", "gdp", "recession", "tariff", "trade war", "sanctions",
+  "opec", "oil price", "dollar", "ecb", "boj", "china", "war", "election",
+]
+medium = [
+  "earnings", "guidance", "outlook", "ipo", "merger", "buyback", "downgrade",
+  "upgrade", "nvidia", "apple", "microsoft", "tesla", "amazon", "bank",
+  "chip", "ai spending", "crude", "gold", "bitcoin",
+]
+
+# ------------------------------------------------------------------
+# Блок 3 — Twitter / X
+# ------------------------------------------------------------------
+# ВНИМАНИЕ: бесплатного X API больше не существует. Без платного ключа или
+# работающего RSS-моста этот раздел уйдёт в отчёт с пометкой
+# «временно недоступен». Подробности — в README, раздел «Блок X/Twitter».
+[x]
+# none         — блок отключён, в отчёте появится пометка о недостающем ключе
+# x_api        — официальный X API v2 (нужен секрет X_BEARER_TOKEN, тариф Basic+)
+# twitterapi_io— сторонний twitterapi.io (секрет X_API_KEY)
+# apidance     — сторонний apidance.pro (секрет X_API_KEY)
+# rss          — мост Nitter/RSSHub, ключ не нужен, но хосты часто лежат
+provider = "none"
+
+# Базовый URL для provider = "rss". Пример: "https://rsshub.app/twitter/user"
+# или адрес собственного инстанса Nitter: "https://nitter.example.com".
+rss_base_url = ""
+
+# Аккаунты — редактируйте свободно, с @ или без.
+accounts = [
+  "DeItaone",
+  "zerohedge",
+  "unusual_whales",
+  "FirstSquawk",
+  "LiveSquawk",
+  "Barchart",
+  "KobeissiLetter",
+  "biancoresearch",
+  "SpecialSitsNews",
+]
+
+# Отсечка «шума» для провайдеров, которые отдают метрики вовлечённости.
+min_likes = 0
+
+# ------------------------------------------------------------------
+# Пересказ заголовков на русском (Claude API, секрет ANTHROPIC_API_KEY)
+# ------------------------------------------------------------------
+[llm]
+enabled = true
+model = "claude-haiku-4-5"
+max_tokens = 4000
+# Если ключа нет или вызов упал — отчёт всё равно уходит,
+# заголовки остаются на языке оригинала с тематической меткой.

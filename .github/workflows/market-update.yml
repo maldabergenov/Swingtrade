@@ -1,0 +1,44 @@
+name: market-update
+
+# Ежедневный маркет апдейт: 09:00 по Астане = 04:00 UTC.
+# Казахстан живёт в UTC+5 без перехода на летнее время, поэтому смещение
+# постоянное. Запуск только по будням (1-5): в субботу и воскресенье рынок США
+# закрыт и «итоги прошлой сессии» дублировали бы пятницу.
+# GitHub Actions может задержать запуск на несколько минут — это нормально.
+on:
+  schedule:
+    - cron: "0 4 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  market-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Сбор маркет-апдейта и отправка в Telegram
+        env:
+          # Обязательные — те же секреты, что и у сканера.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Опциональные: без них соответствующий блок деградирует, но не падает.
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          TIMEZONE: Asia/Almaty
+          LOG_LEVEL: INFO
+        run: python market_update.py
+      - name: Сохранить снимок отчёта как артефакт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-update-${{ github.run_id }}
+          path: reports/market_update_*.json
+          if-no-files-found: ignore
+          retention-days: 30

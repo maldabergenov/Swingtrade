@@ -1,11 +1,17 @@
 name: market-update
 
-# Ежедневный маркет апдейт: 09:00 по Астане = 04:00 UTC.
-# Казахстан живёт в UTC+5 без перехода на летнее время, поэтому смещение
-# постоянное. Запуск только по будням (1-5): в субботу и воскресенье рынок США
-# закрыт и «итоги прошлой сессии» дублировали бы пятницу.
-# GitHub Actions может задержать запуск на несколько минут — это нормально.
+# Ежедневный маркет апдейт: 09:00 по Астане (UTC+5, без перехода на летнее время).
+#
+# Основной триггер — repository_dispatch от внешнего планировщика
+# (cron-job.org и подобные): он соблюдает время с точностью до минуты.
+# Встроенный schedule оставлен подстраховкой на случай, если внешний
+# планировщик замолчит: у GitHub общая очередь, утренний cron стабильно
+# опаздывает на 40-50 минут, а иногда пропускается совсем.
+# Шаг «Проверить, не уходила ли сводка сегодня» гасит дубль, если внешний
+# триггер уже отработал. Настройка внешнего планировщика — в README.
 on:
+  repository_dispatch:
+    types: [market-update]
   schedule:
     - cron: "0 4 * * 1-5"
   workflow_dispatch:
@@ -14,14 +20,54 @@ jobs:
   market-update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
     steps:
+      - name: Проверить, не уходила ли сводка сегодня
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Дубль возможен только у запасного schedule: ручной и внешний
+          # запуск пользователь инициирует осознанно и повторов не боится.
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Запуск по событию ${{ github.event_name }} — выполняю."
+            exit 0
+          fi
+          today=$(date -u +%Y-%m-%d)
+          runs=$(curl -sS --fail-with-body \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/market-update.yml/runs?created=${today}&status=success&per_page=100" \
+            || echo '')
+          if [ -z "$runs" ]; then
+            # API недоступен — лучше прислать возможный дубль, чем промолчать.
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Не удалось опросить API, выполняю без проверки."
+            exit 0
+          fi
+          done_today=$(echo "$runs" | jq '[.workflow_runs[] | select(.event != "schedule")] | length')
+          if [ "${done_today:-0}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Сводка сегодня уже уходила ($done_today запуск(ов)) — пропускаю запасной cron."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Внешний триггер сегодня не сработал — выполняю запасной cron."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+        if: steps.guard.outputs.skip != 'true'
       - name: Сбор маркет-апдейта и отправка в Telegram
+        if: steps.guard.outputs.skip != 'true'
         env:
           # Обязательные — те же секреты, что и у сканера.
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -35,7 +81,7 @@ jobs:
           LOG_LEVEL: INFO
         run: python market_update.py
       - name: Сохранить снимок отчёта как артефакт
-        if: always()
+        if: always() && steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: market-update-${{ github.run_id }}

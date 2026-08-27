@@ -38,7 +38,7 @@ _STOPWORDS = frozenset(
 
 # Тематические метки — используются, когда пересказ через LLM недоступен.
 _TAGS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("ставки", ("fed", "fomc", "powell", "rate", "yield", "treasury", "ecb", "boj")),
+    ("%", ("fed", "fomc", "powell", "rate", "yield", "treasury", "ecb", "boj")),
     ("инфляция", ("inflation", "cpi", "ppi", "pce", "price index")),
     ("макро", ("gdp", "payroll", "jobs", "unemployment", "recession", "retail sales")),
     ("геополитика", ("war", "sanction", "tariff", "trade war", "election", "strike")),

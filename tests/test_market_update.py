@@ -174,7 +174,7 @@ def test_collect_news_ranks_macro_above_corporate(config):
     section = collect_news(config, session=session, now=NOW)
     assert section.ok
     assert section.headlines[0].title == "Fed signals rate cut"
-    assert section.headlines[0].tag == "ставки"
+    assert section.headlines[0].tag == "%"
 
 
 def test_collect_news_deduplicates_same_story_across_feeds(config):
@@ -281,7 +281,7 @@ def make_update(*, market_ok=True, news_ok=True, social_ok=False) -> MarketUpdat
         NewsSection(
             key="news",
             title="Главные новости",
-            headlines=[Headline("Fed signals cut", "https://a.test/1", "Reuters", NOW, tag="ставки")],
+            headlines=[Headline("Fed signals cut", "https://a.test/1", "Reuters", NOW, tag="%")],
         )
         if news_ok
         else NewsSection.failed("news", "Главные новости", "ленты недоступны")
